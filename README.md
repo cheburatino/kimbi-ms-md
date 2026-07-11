@@ -1,11 +1,14 @@
 # kimbi-ms-md — реализация Кимби СУ на markdown и git
 
-Реализация фреймворка системы управления
-[Кимби СУ / kimbi-ms-framework](https://github.com/cheburatino/kimbi-ms-framework)
-в виде директорий с md-файлами и git.
+Реализация фреймворка системы управления Кимби СУ в виде директорий
+с md-файлами и git. Самодостаточна: текст реализуемой версии фреймворка —
+внутри.
 
-- Устройство реализации — [md_implementation.md](md_implementation.md)
-- Руководство для ИИ-агента — [agent_guide.md](agent_guide.md)
+- Фреймворк (понятия, статусы, связи) —
+  [framework/framework.md](framework/framework.md)
+- Устройство реализации —
+  [framework/implementation.md](framework/implementation.md)
+- Руководство для ИИ-агента — [ai_agent/guide.md](ai_agent/guide.md)
 - Шаблоны объектов — [templates/](templates/)
 - Скрипты — [scripts/](scripts/)
 
@@ -14,17 +17,22 @@
 Требования: git, python3.
 
 ```
-git clone git@github.com:cheburatino/kimbi-ms-md.git
+git clone https://github.com/cheburatino/kimbi-ms-md.git
 python3 kimbi-ms-md/scripts/init_instance.py romashka-ms
 ```
 
 Рядом с клоном появится директория инстанса: структура системы, README,
-точки входа для ИИ-агентов, указатель на фреймворк и git-репозиторий
+точки входа для ИИ-агентов, указатель на реализацию и git-репозиторий
 (первый коммит — `init`). Останется привязать удалённый репозиторий.
-Для локального чтения фреймворка рядом клонируется и kimbi-ms-framework.
 
-## Соответствие фреймворку
+## Фреймворк
 
-Реализация соответствует kimbi-ms-framework, коммит `5fa010a` (2026-07-11).
-При изменении фреймворка реализация приводится в соответствие следующей
-операцией, отметка обновляется.
+`framework/framework.md` — копия текста фреймворка той версии, которую
+реализует этот репозиторий (сейчас — kimbi-ms-framework, коммит `04686a4`).
+Канонически фреймворк развивается в
+[kimbi-ms-framework](https://github.com/cheburatino/kimbi-ms-framework);
+копия не редактируется на месте, а обновляется оттуда вместе с приведением
+реализации в соответствие — одной операцией.
+
+Кастомизация фреймворка под себя — форк этого репозитория: копия
+фреймворка и реализация меняются вместе.
