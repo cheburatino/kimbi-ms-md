@@ -85,7 +85,7 @@ outcome:                 # success | failed | canceled — только при e
 suspended:               # дата откладывания; пустое поле — цель активна
 desired_achieve_date:
 plan_achieve_date:
-achieve_date:            # фактическая — только при исходе success
+end_date:                # дата завершения — при любом исходе
 contributes_to:          # список путей к целям, которым способствует
 ---
 ```

@@ -10,8 +10,8 @@
 
 Механическая часть атомарной процедуры из implementation.md:
   1. front matter: status, outcome, фактические даты (у задачи start_date
-     при in_progress и end_date при ended, у цели achieve_date при ended
-     с исходом success — если пустые);
+     при in_progress и end_date при ended, у цели end_date при ended
+     при любом исходе — если пустые);
   2. перемещение директории объекта в статусную директорию;
   3. обновление входящих ссылок по всем md-файлам системы (включая
      %20-кодированные пути в markdown-ссылках).
@@ -172,8 +172,8 @@ def main() -> None:
         if args.status == "ended":
             set_field(fm_lines, "end_date", today, only_if_empty=True)
     else:
-        if args.status == "ended" and args.outcome == "success":
-            set_field(fm_lines, "achieve_date", today, only_if_empty=True)
+        if args.status == "ended":
+            set_field(fm_lines, "end_date", today, only_if_empty=True)
     obj_file.write_text(
         "---\n" + "\n".join(fm_lines) + "\n---\n" + text[m.end():], encoding="utf-8"
     )
