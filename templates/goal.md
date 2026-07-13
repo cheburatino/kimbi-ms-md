@@ -1,15 +1,24 @@
 ---
 title:
-status: draft
+status: formulating
 outcome:
-plan_end_date:
-end_date:
+suspended:
+desired_achieve_date:
+plan_achieve_date:
+achieve_date:
+contributes_to:
 ---
 
 ## Описание
 
 
 ## Критерии успеха
+
+
+## Заметки
+
+
+## Журнал
 
 
 ## Результат

@@ -1,19 +1,26 @@
 ---
 title:
-status: draft
+status: planning
 outcome:
-goal:
-parent_task:
+suspended:
+desired_start_date:
 plan_start_date:
 start_date:
+desired_end_date:
 plan_end_date:
 end_date:
+contributes_to:
+parent_task:
+depends_on:
 ---
 
 ## Описание
 
 
-## Результат
-
-
 ## Заметки
+
+
+## Журнал выполнения
+
+
+## Результат

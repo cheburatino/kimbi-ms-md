@@ -4,12 +4,14 @@
 Использование:
   python3 change_status.py <путь-к-директории-объекта> <статус> [--outcome …]
 
-  статус:    draft | in_progress | ended
+  статусы цели:   formulating | formulated | set | ended
+  статусы задачи: planning | ready | in_progress | ended
   --outcome: success | failed | canceled — обязателен при ended
 
-Механическая часть атомарной процедуры из md_implementation.md:
-  1. front matter: status, outcome, фактические даты (start_date при
-     in_progress, end_date при ended — если пустые);
+Механическая часть атомарной процедуры из implementation.md:
+  1. front matter: status, outcome, фактические даты (у задачи start_date
+     при in_progress и end_date при ended, у цели achieve_date при ended
+     с исходом success — если пустые);
   2. перемещение директории объекта в статусную директорию;
   3. обновление входящих ссылок по всем md-файлам системы (включая
      %20-кодированные пути в markdown-ссылках).
@@ -24,7 +26,21 @@ import re
 import sys
 from pathlib import Path
 
-STATUS_DIRS = {"draft": "1 draft", "in_progress": "2 in_progress", "ended": "3 ended"}
+STATUS_DIRS = {
+    "goal.md": {
+        "formulating": "1 formulating",
+        "formulated": "2 formulated",
+        "set": "3 set",
+        "ended": "4 ended",
+    },
+    "task.md": {
+        "planning": "1 planning",
+        "ready": "2 ready",
+        "in_progress": "3 in_progress",
+        "ended": "4 ended",
+    },
+}
+ALL_STATUSES = sorted({s for dirs in STATUS_DIRS.values() for s in dirs})
 OUTCOMES = ("success", "failed", "canceled")
 
 
@@ -65,7 +81,7 @@ def main() -> None:
         epilog=__doc__,
     )
     ap.add_argument("object_dir", help="директория цели или задачи")
-    ap.add_argument("status", choices=sorted(STATUS_DIRS), help="новый статус")
+    ap.add_argument("status", choices=ALL_STATUSES, help="новый статус")
     ap.add_argument("--outcome", choices=OUTCOMES, help="исход — только при ended")
     args = ap.parse_args()
 
@@ -77,15 +93,22 @@ def main() -> None:
     )
     if obj_file is None:
         fail(f"в {obj_dir} нет goal.md или task.md")
+    status_dirs = STATUS_DIRS[obj_file.name]
+    if args.status not in status_dirs:
+        kind = "цели" if obj_file.name == "goal.md" else "задачи"
+        fail(
+            f"статус «{args.status}» не применим к объекту типа {obj_file.name}; "
+            f"статусы {kind}: {', '.join(status_dirs)}"
+        )
     if args.status == "ended" and not args.outcome:
         fail("для статуса ended обязателен --outcome")
     if args.outcome and args.status != "ended":
         fail("--outcome имеет смысл только со статусом ended")
-    if obj_dir.parent.name not in STATUS_DIRS.values():
+    if obj_dir.parent.name not in status_dirs.values():
         fail(f"объект лежит не в статусной директории: «{obj_dir.parent.name}»")
 
     root = find_root(obj_dir)
-    new_dir = obj_dir.parent.parent / STATUS_DIRS[args.status] / obj_dir.name
+    new_dir = obj_dir.parent.parent / status_dirs[args.status] / obj_dir.name
     if new_dir == obj_dir:
         fail(f"объект уже в статусе {args.status}")
     if new_dir.exists():
@@ -102,10 +125,14 @@ def main() -> None:
     today = datetime.date.today().isoformat()
     if args.outcome:
         set_field(fm_lines, "outcome", args.outcome)
-    if args.status == "in_progress":
-        set_field(fm_lines, "start_date", today, only_if_empty=True)
-    if args.status == "ended":
-        set_field(fm_lines, "end_date", today, only_if_empty=True)
+    if obj_file.name == "task.md":
+        if args.status == "in_progress":
+            set_field(fm_lines, "start_date", today, only_if_empty=True)
+        if args.status == "ended":
+            set_field(fm_lines, "end_date", today, only_if_empty=True)
+    else:
+        if args.status == "ended" and args.outcome == "success":
+            set_field(fm_lines, "achieve_date", today, only_if_empty=True)
     obj_file.write_text(
         "---\n" + "\n".join(fm_lines) + "\n---\n" + text[m.end():], encoding="utf-8"
     )
