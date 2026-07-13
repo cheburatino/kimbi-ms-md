@@ -16,6 +16,9 @@
   3. обновление входящих ссылок по всем md-файлам системы (включая
      %20-кодированные пути в markdown-ссылках).
 
+При старте задачи (in_progress) — неблокирующее предупреждение о незакрытых
+зависимостях из depends_on (закрыта = ended с исходом success).
+
 Смысловая часть — заполнить результат и сделать коммит — за агентом
 или человеком.
 """
@@ -72,6 +75,44 @@ def set_field(fm_lines: list, key: str, value: str, only_if_empty: bool = False)
         fm_lines[i] = new
         return True
     return False
+
+
+def get_scalar(fm_lines: list, key: str) -> str:
+    """Значение скалярного поля front matter (без комментария)."""
+    pat = re.compile(rf"^{re.escape(key)}:\s*([^#]*?)\s*(#.*)?$")
+    for line in fm_lines:
+        m = pat.match(line)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
+def get_list_field(fm_lines: list, key: str) -> list:
+    """Значения YAML-списка: инлайн `[a, b]` или блок строк `- item`."""
+    for i, line in enumerate(fm_lines):
+        m = re.match(rf"^{re.escape(key)}:\s*(.*)$", line)
+        if not m:
+            continue
+        inline = m.group(1).strip()
+        if inline:
+            return [v.strip().strip("'\"") for v in inline.strip("[]").split(",") if v.strip()]
+        vals = []
+        for nxt in fm_lines[i + 1:]:
+            lm = re.match(r"^\s+-\s*(.+?)\s*$", nxt)
+            if lm:
+                vals.append(lm.group(1).strip("'\""))
+            elif nxt.strip() == "":
+                continue
+            else:  # следующее поле front matter
+                break
+        return vals
+    return []
+
+
+def read_fm_lines(path: Path) -> list:
+    """Строки front matter файла объекта; пустой список, если его нет."""
+    m = re.match(r"^---\n(.*?)\n---\n", path.read_text(encoding="utf-8"), re.DOTALL)
+    return m.group(1).split("\n") if m else []
 
 
 def main() -> None:
@@ -137,24 +178,46 @@ def main() -> None:
         "---\n" + "\n".join(fm_lines) + "\n---\n" + text[m.end():], encoding="utf-8"
     )
 
+    # предупреждение о незакрытых зависимостях при старте задачи
+    open_deps = []
+    if obj_file.name == "task.md" and args.status == "in_progress":
+        for dep in get_list_field(fm_lines, "depends_on"):
+            dep_path = root / dep
+            dep_file = dep_path / "task.md" if dep_path.is_dir() else dep_path
+            if not dep_file.is_file():
+                open_deps.append(f"{dep} — не найдена")
+                continue
+            dep_fm = read_fm_lines(dep_file)
+            dep_status = get_scalar(dep_fm, "status")
+            dep_outcome = get_scalar(dep_fm, "outcome")
+            if not (dep_status == "ended" and dep_outcome == "success"):
+                state = dep_status or "?"
+                if dep_outcome:
+                    state += f"/{dep_outcome}"
+                open_deps.append(f"{dep} — {state}")
+
     # 2. перемещение
     old_rel = obj_dir.relative_to(root).as_posix()
     new_rel = new_dir.relative_to(root).as_posix()
     obj_dir.rename(new_dir)
 
-    # 3. входящие ссылки
+    # 3. входящие ссылки. Путь заменяется только на границе сегмента: следом
+    # должен идти разделитель, закрытие ссылки/списка или конец строки — иначе
+    # путь-префикс затронул бы «соседа» с более длинным слагом (foo → foo-bar).
+    boundary = r"""(?=[/\s"')\]>,}]|$)"""
     pairs = [
         (old_rel, new_rel),
         (old_rel.replace(" ", "%20"), new_rel.replace(" ", "%20")),
     ]
+    subs = [(re.compile(re.escape(old) + boundary), new) for old, new in pairs]
     changed = []
     for p in sorted(root.rglob("*.md")):
         if ".git" in p.parts:
             continue
         t = p.read_text(encoding="utf-8")
         t2 = t
-        for old, new in pairs:
-            t2 = t2.replace(old, new)
+        for pat, new in subs:
+            t2 = pat.sub(lambda _m, r=new: r, t2)
         if t2 != t:
             p.write_text(t2, encoding="utf-8")
             changed.append(p.relative_to(root).as_posix())
@@ -167,6 +230,10 @@ def main() -> None:
             print(f"  {c}")
     else:
         print("входящих ссылок не найдено")
+    if open_deps:
+        print("Предупреждение: при старте есть незакрытые зависимости:", file=sys.stderr)
+        for d in open_deps:
+            print(f"  {d}", file=sys.stderr)
     print("Дальше: заполнить результат (при завершении) и закоммитить.")
 
 
