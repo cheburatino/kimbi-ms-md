@@ -4,20 +4,20 @@
 Использование:
   python3 change_status.py <путь-к-директории-объекта> <статус> [--outcome …]
 
-  статусы цели:   formulating | formulated | set | ended
-  статусы задачи: planning | ready | in_progress | ended
+  статусы цели:   formulating | planning | ready_to_start | set | ended
+  статусы задачи: formulating | planning | ready_to_start | in_progress | ended
   --outcome: success | failed | canceled — обязателен при ended
 
 Механическая часть атомарной процедуры из implementation.md:
-  1. front matter: status, outcome, фактические даты (у задачи start_date
-     при in_progress и end_date при ended, у цели end_date при ended
-     при любом исходе — если пустые);
+  1. таблица `## Данные`: Статус, Исход, фактические даты (у задачи
+     «Дата начала» при in_progress и «Дата завершения» при ended, у цели
+     «Дата завершения» при ended при любом исходе — если пустые);
   2. перемещение директории объекта в статусную директорию;
   3. обновление входящих ссылок по всем md-файлам системы (включая
      %20-кодированные пути в markdown-ссылках).
 
 При старте задачи (in_progress) — неблокирующее предупреждение о незакрытых
-зависимостях из depends_on (закрыта = ended с исходом success).
+зависимостях из строки «Зависит от» (закрыта = «завершена» с исходом «успех»).
 
 Смысловая часть — заполнить результат и сделать коммит — за агентом
 или человеком.
@@ -32,19 +32,30 @@ from pathlib import Path
 STATUS_DIRS = {
     "goal.md": {
         "formulating": "1 formulating",
-        "formulated": "2 formulated",
-        "set": "3 set",
-        "ended": "4 ended",
+        "planning": "2 planning",
+        "ready_to_start": "3 ready_to_start",
+        "set": "4 set",
+        "ended": "5 ended",
     },
     "task.md": {
-        "planning": "1 planning",
-        "ready": "2 ready",
-        "in_progress": "3 in_progress",
-        "ended": "4 ended",
+        "formulating": "1 formulating",
+        "planning": "2 planning",
+        "ready_to_start": "3 ready_to_start",
+        "in_progress": "4 in_progress",
+        "ended": "5 ended",
     },
 }
 ALL_STATUSES = sorted({s for dirs in STATUS_DIRS.values() for s in dirs})
+STATUS_RU = {
+    "formulating": "формулируется",
+    "planning": "планируется",
+    "ready_to_start": "на старте",
+    "set": "поставлена",
+    "in_progress": "в работе",
+    "ended": "завершена",
+}
 OUTCOMES = ("success", "failed", "canceled")
+OUTCOME_RU = {"success": "успех", "failed": "провал", "canceled": "отмена"}
 
 
 def fail(msg: str) -> None:
@@ -60,59 +71,41 @@ def find_root(path: Path) -> Path:
     fail("не найден корень системы (директория с .git) выше объекта")
 
 
-def set_field(fm_lines: list, key: str, value: str, only_if_empty: bool = False) -> bool:
-    """Заменить значение поля front matter, сохранив комментарий строки."""
-    pat = re.compile(rf"^({re.escape(key)}:)\s*([^#]*?)\s*(#.*)?$")
-    for i, line in enumerate(fm_lines):
-        m = pat.match(line)
-        if not m:
-            continue
-        if only_if_empty and m.group(2).strip():
-            return False
-        new = f"{m.group(1)} {value}".rstrip()
-        if m.group(3):
-            new += "  " + m.group(3)
-        fm_lines[i] = new
-        return True
-    return False
+def row_pat(label: str) -> re.Pattern:
+    return re.compile(rf"^\|\s*{re.escape(label)}\s*\|(.*)\|\s*$")
 
 
-def get_scalar(fm_lines: list, key: str) -> str:
-    """Значение скалярного поля front matter (без комментария)."""
-    pat = re.compile(rf"^{re.escape(key)}:\s*([^#]*?)\s*(#.*)?$")
-    for line in fm_lines:
+def get_row(lines: list, label: str) -> str:
+    """Значение ячейки строки таблицы `## Данные` по метке поля."""
+    pat = row_pat(label)
+    for line in lines:
         m = pat.match(line)
         if m:
             return m.group(1).strip()
     return ""
 
 
-def get_list_field(fm_lines: list, key: str) -> list:
-    """Значения YAML-списка: инлайн `[a, b]` или блок строк `- item`."""
-    for i, line in enumerate(fm_lines):
-        m = re.match(rf"^{re.escape(key)}:\s*(.*)$", line)
+def set_row(lines: list, label: str, value: str, only_if_empty: bool = False) -> bool:
+    """Записать значение в ячейку строки таблицы по метке поля."""
+    pat = row_pat(label)
+    for i, line in enumerate(lines):
+        m = pat.match(line)
         if not m:
             continue
-        inline = m.group(1).strip()
-        if inline:
-            return [v.strip().strip("'\"") for v in inline.strip("[]").split(",") if v.strip()]
-        vals = []
-        for nxt in fm_lines[i + 1:]:
-            lm = re.match(r"^\s+-\s*(.+?)\s*$", nxt)
-            if lm:
-                vals.append(lm.group(1).strip("'\""))
-            elif nxt.strip() == "":
-                continue
-            else:  # следующее поле front matter
-                break
-        return vals
-    return []
+        if only_if_empty and m.group(1).strip():
+            return False
+        lines[i] = f"| {label} | {value} |"
+        return True
+    return False
 
 
-def read_fm_lines(path: Path) -> list:
-    """Строки front matter файла объекта; пустой список, если его нет."""
-    m = re.match(r"^---\n(.*?)\n---\n", path.read_text(encoding="utf-8"), re.DOTALL)
-    return m.group(1).split("\n") if m else []
+def link_paths(cell: str) -> list:
+    """Пути из markdown-ссылок в ячейке: [Название](путь) → путь."""
+    return [p.strip() for p in re.findall(r"\]\(([^)]+)\)", cell)]
+
+
+def read_lines(path: Path) -> list:
+    return path.read_text(encoding="utf-8").split("\n")
 
 
 def main() -> None:
@@ -155,42 +148,36 @@ def main() -> None:
     if new_dir.exists():
         fail(f"{new_dir} уже существует")
 
-    # 1. front matter
-    text = obj_file.read_text(encoding="utf-8")
-    m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
-    if not m:
-        fail(f"в {obj_file.name} нет front matter")
-    fm_lines = m.group(1).split("\n")
-    if not set_field(fm_lines, "status", args.status):
-        fail("во front matter нет поля status")
+    # 1. таблица `## Данные`
+    lines = read_lines(obj_file)
+    if not set_row(lines, "Статус", STATUS_RU[args.status]):
+        fail("в объекте нет строки «Статус» в таблице «## Данные»")
     today = datetime.date.today().isoformat()
     if args.outcome:
-        set_field(fm_lines, "outcome", args.outcome)
+        set_row(lines, "Исход", OUTCOME_RU[args.outcome])
     if obj_file.name == "task.md":
         if args.status == "in_progress":
-            set_field(fm_lines, "start_date", today, only_if_empty=True)
+            set_row(lines, "Дата начала", today, only_if_empty=True)
         if args.status == "ended":
-            set_field(fm_lines, "end_date", today, only_if_empty=True)
+            set_row(lines, "Дата завершения", today, only_if_empty=True)
     else:
         if args.status == "ended":
-            set_field(fm_lines, "end_date", today, only_if_empty=True)
-    obj_file.write_text(
-        "---\n" + "\n".join(fm_lines) + "\n---\n" + text[m.end():], encoding="utf-8"
-    )
+            set_row(lines, "Дата завершения", today, only_if_empty=True)
+    obj_file.write_text("\n".join(lines), encoding="utf-8")
 
     # предупреждение о незакрытых зависимостях при старте задачи
     open_deps = []
     if obj_file.name == "task.md" and args.status == "in_progress":
-        for dep in get_list_field(fm_lines, "depends_on"):
+        for dep in link_paths(get_row(lines, "Зависит от")):
             dep_path = root / dep
-            dep_file = dep_path / "task.md" if dep_path.is_dir() else dep_path
+            dep_file = dep_path if dep_path.is_file() else dep_path / "task.md"
             if not dep_file.is_file():
                 open_deps.append(f"{dep} — не найдена")
                 continue
-            dep_fm = read_fm_lines(dep_file)
-            dep_status = get_scalar(dep_fm, "status")
-            dep_outcome = get_scalar(dep_fm, "outcome")
-            if not (dep_status == "ended" and dep_outcome == "success"):
+            dep_lines = read_lines(dep_file)
+            dep_status = get_row(dep_lines, "Статус")
+            dep_outcome = get_row(dep_lines, "Исход")
+            if not (dep_status == STATUS_RU["ended"] and dep_outcome == OUTCOME_RU["success"]):
                 state = dep_status or "?"
                 if dep_outcome:
                     state += f"/{dep_outcome}"
@@ -223,7 +210,7 @@ def main() -> None:
             changed.append(p.relative_to(root).as_posix())
 
     print(f"{old_rel} → {new_rel}")
-    print("front matter: status=" + args.status + (f", outcome={args.outcome}" if args.outcome else ""))
+    print("данные: Статус=" + STATUS_RU[args.status] + (f", Исход={OUTCOME_RU[args.outcome]}" if args.outcome else ""))
     if changed:
         print("обновлены ссылки:")
         for c in changed:

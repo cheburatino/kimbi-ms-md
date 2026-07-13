@@ -57,8 +57,8 @@ POINTER = f"""\
 """
 
 SPACES = {
-    "2 goal": ("1 formulating", "2 formulated", "3 set", "4 ended"),
-    "3 task": ("1 planning", "2 ready", "3 in_progress", "4 ended"),
+    "2 goal": ("1 formulating", "2 planning", "3 ready_to_start", "4 set", "5 ended"),
+    "3 task": ("1 formulating", "2 planning", "3 ready_to_start", "4 in_progress", "5 ended"),
 }
 
 
